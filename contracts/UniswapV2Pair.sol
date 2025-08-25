@@ -162,7 +162,9 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
         require(amount0Out < _reserve0 && amount1Out < _reserve1, 'UniswapV2: INSUFFICIENT_LIQUIDITY');
 
         uint maxToken0Out = uint(_reserve0) / 100;
-        require(amount0Out <= maxToken0Out, "Swap exceeds 1% of token0 liquidity");
+        uint maxToken1Out = uint(_reserve1) / 100;
+        require(amount0Out <= maxToken0Out, "UniswapV2: OUTPUT_EXCEEDS_1_PERCENT_TOKEN0_LIQUIDITY");
+        require(amount1Out <= maxToken1Out, "UniswapV2: OUTPUT_EXCEEDS_1_PERCENT_TOKEN1_LIQUIDITY");
 
         uint balance0;
         uint balance1;
