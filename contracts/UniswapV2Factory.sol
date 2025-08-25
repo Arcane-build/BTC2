@@ -2,6 +2,7 @@ pragma solidity =0.5.16;
 
 import './interfaces/IUniswapV2Factory.sol';
 import './UniswapV2Pair.sol';
+import './VestingVault.sol';
 
 contract UniswapV2Factory is IUniswapV2Factory {
     address public feeTo;
@@ -9,6 +10,11 @@ contract UniswapV2Factory is IUniswapV2Factory {
 
     mapping(address => mapping(address => address)) public getPair;
     address[] public allPairs;
+
+    address public baseToken;
+
+    mapping(address => address) public vestingVaultsByToken;
+    mapping(address => address) public vestingVaultsByPair;
 
     event PairCreated(address indexed token0, address indexed token1, address pair, uint);
 
@@ -34,6 +40,14 @@ contract UniswapV2Factory is IUniswapV2Factory {
         getPair[token0][token1] = pair;
         getPair[token1][token0] = pair; // populate mapping in the reverse direction
         allPairs.push(pair);
+
+        address vestingToken = _checkIfBaseTokenAndReturnVestingToken(token0, token1);
+        if (vestingToken != address(0)) {
+            address vestingVault = new VestingVault(IERC20Metadata(vestingToken), pair);
+            vestingVaultsByToken[vestingToken] = vestingVault;
+            vestingVaultsByPair[pair] = vestingVault;
+        }
+
         emit PairCreated(token0, token1, pair, allPairs.length);
     }
 
@@ -45,5 +59,20 @@ contract UniswapV2Factory is IUniswapV2Factory {
     function setFeeToSetter(address _feeToSetter) external {
         require(msg.sender == feeToSetter, 'UniswapV2: FORBIDDEN');
         feeToSetter = _feeToSetter;
+    }
+
+    function setBaseToken(address _baseToken) external {
+        require(msg.sender == feeToSetter, 'UniswapV2: FORBIDDEN');
+        baseToken = _baseToken;
+    }
+
+    function _checkIfBaseTokenAndReturnVestingToken(address token0, address token1) internal view returns (address vestingToken) {
+        if (token0 == baseToken) {
+            vestingToken = token1;
+        } else if (token1 == baseToken) {
+            vestingToken = token0;
+        } else {
+            vestingToken = address(0);
+        }
     }
 }
