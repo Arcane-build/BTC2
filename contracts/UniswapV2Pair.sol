@@ -28,6 +28,9 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
     uint public kLast; // reserve0 * reserve1, as of immediately after the most recent liquidity event
 
     uint private unlocked = 1;
+
+    mapping(address => uint256) public lastSwapBlock; // track user's last swap block
+
     modifier lock() {
         require(unlocked == 1, 'UniswapV2: LOCKED');
         unlocked = 0;
@@ -160,6 +163,11 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
         require(amount0Out > 0 || amount1Out > 0, 'UniswapV2: INSUFFICIENT_OUTPUT_AMOUNT');
         (uint112 _reserve0, uint112 _reserve1,) = getReserves(); // gas savings
         require(amount0Out < _reserve0 && amount1Out < _reserve1, 'UniswapV2: INSUFFICIENT_LIQUIDITY');
+
+        address user = tx.origin;
+        uint currentBlock = block.number;
+        require(lastSwapBlock[user] < currentBlock, 'UniswapV2: ONE_SWAP_PER_BLOCK');
+        lastSwapBlock[user] = currentBlock;
 
         uint maxToken0Out = uint(_reserve0) / 100;
         uint maxToken1Out = uint(_reserve1) / 100;
