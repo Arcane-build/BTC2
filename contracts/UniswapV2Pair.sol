@@ -28,6 +28,11 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
     uint public kLast; // reserve0 * reserve1, as of immediately after the most recent liquidity event
 
     uint private unlocked = 1;
+
+    address public vestingVault; // vesting vault contract address
+
+    mapping(address => uint256) public lastSwapBlock; // track user's last swap block
+
     modifier lock() {
         require(unlocked == 1, 'UniswapV2: LOCKED');
         unlocked = 0;
@@ -161,8 +166,15 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
         (uint112 _reserve0, uint112 _reserve1,) = getReserves(); // gas savings
         require(amount0Out < _reserve0 && amount1Out < _reserve1, 'UniswapV2: INSUFFICIENT_LIQUIDITY');
 
+        address user = tx.origin;
+        uint currentBlock = block.number;
+        require(lastSwapBlock[user] < currentBlock, 'UniswapV2: ONE_SWAP_PER_BLOCK');
+        lastSwapBlock[user] = currentBlock;
+
         uint maxToken0Out = uint(_reserve0) / 100;
-        require(amount0Out <= maxToken0Out, "Swap exceeds 1% of token0 liquidity");
+        uint maxToken1Out = uint(_reserve1) / 100;
+        require(amount0Out <= maxToken0Out, "UniswapV2: OUTPUT_EXCEEDS_1_PERCENT_TOKEN0_LIQUIDITY");
+        require(amount1Out <= maxToken1Out, "UniswapV2: OUTPUT_EXCEEDS_1_PERCENT_TOKEN1_LIQUIDITY");
 
         uint balance0;
         uint balance1;
@@ -170,8 +182,17 @@ contract UniswapV2Pair is IUniswapV2Pair, UniswapV2ERC20 {
         address _token0 = token0;
         address _token1 = token1;
         require(to != _token0 && to != _token1, 'UniswapV2: INVALID_TO');
-        if (amount0Out > 0) _safeTransfer(_token0, to, amount0Out); // optimistically transfer tokens
-        if (amount1Out > 0) _safeTransfer(_token1, to, amount1Out); // optimistically transfer tokens
+
+        if (amount0Out > 0) {
+            _safeTransfer(_token0, vestingVault, amount0Out); // optimistically transfer tokens to vesting vault
+            IVestingVault(vestingVault).vest(to, amount0Out); // record vesting allocation
+        }
+
+        if (amount1Out > 0) {
+            _safeTransfer(_token1, vestingVault, amount1Out); // optimistically transfer tokens to vesting vault
+            IVestingVault(vestingVault).vest(to, amount1Out);
+        }
+
         if (data.length > 0) IUniswapV2Callee(to).uniswapV2Call(msg.sender, amount0Out, amount1Out, data);
         balance0 = IERC20(_token0).balanceOf(address(this));
         balance1 = IERC20(_token1).balanceOf(address(this));
